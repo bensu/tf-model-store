@@ -89,17 +89,10 @@
 
 (import os)
 
-(import zipfile)
+(import shutil)
 
 (defn zipdir! [source target]
-  "Adds all files in the `source` directory into the `target` zip file"
-  (with [ziph (zipfile.ZipFile target "w" zipfile.ZIP_DEFLATED)]
-    (for [rs (os.walk source)]
-      ;; XXX: fix to use relative paths to the root of the passed source and not the call directory
-      (setv root (first rs))
-      (setv files (last rs))
-      (for [file files]
-        (.write ziph (os.path.join root file))))))
+  (shutil.make_archive target "zip" source))
 
 (import hashlib)
 
