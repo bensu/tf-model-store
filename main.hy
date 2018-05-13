@@ -46,3 +46,22 @@
 (setv accuracy (tf.reduce_mean (tf.cast correct-prediction tf.float32)))
 
 (print (.run session accuracy :feed_dict {x minst.test.images yy minst.test.labels}))
+
+;; ======================================================================
+;; Serialize the model
+
+(import tempfile)
+(import tensorflow.python.util.compat)
+
+(setv target-dir "data/models/1")
+
+(setv builder (tensorflow.saved_model.builder.SavedModelBuilder target-dir))
+
+(setv model (tf.saved_model.signature_def_utils.predict_signature_def :inputs {"x" x} :outputs {"y" y}))
+
+(.add_meta_graph_and_variables builder
+                               session
+                               [tf.saved_model.tag_constants.SERVING]
+                               :signature_def_map {"magic_model" model})
+
+(.save builder)
