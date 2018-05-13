@@ -150,19 +150,9 @@
   (.upper (.hexdigest sha1)))
 
 ;; ======================================================================
-;; Upload S3
+;; Package and Publish
 
-(import boto)
-
-(defn upload-file! [bucket file-path file-hash]
-  (setv k (boto.s3.key.Key bucket))
-
-  (setv k.key file-hash)
-
-  (.set_contents_from_filename k file-path))
-
-;; ======================================================================
-;; Publish
+(import boto3)
 
 (setv *models-bucket* "the-bucket-you-are-using")
 
@@ -172,9 +162,15 @@
                                      :model-name model-name :examples examples :owner owner))
   (setv sha (hash-dir saved-model-dir))
   (zipdir! saved-model-dir saved-model-dir)
-  (setv s3 (.connect_s3 boto))
-  (setv bucket (.get_bucket s3 *models-bucket*))
-  (upload-file! bucket (+ saved-model-dir ".zip") sha)
+
+  (setv s3 (boto3.resource "s3"))
+  (setv bucket (s3.Bucket *models-bucket*))
+  (bucket.upload_file (+ saved-model-dir ".zip") sha)
+
+  (comment
+    (setv s3 (.connect_s3 boto))
+    (setv bucket (.get_bucket s3 *models-bucket*)))
+
   sha)
 
 (publish! :session session :model model :model-name "simple-linear"
@@ -190,8 +186,6 @@
   (setv bucket (.get_bucket s3 *models-bucket*))
 
   (zipdir! "data/models/2" "data/models/2.zip")
-
-  (upload-file! bucket "data/models/2.zip")
 
   ;; example API call
 
