@@ -69,27 +69,7 @@
 ;; ======================================================================
 ;; Upload the model to S3
 
-(import sys)
-
-(import hashlib)
-
 (import os)
-
-(defn hash-dir [dir-path]
-  "Returns a hex string of the sha1 digest of the contents of the directory"
-  (setv *buf-size* 65536)
-  (setv sha1 (hashlib.sha1))
-  (for [rs (os.walk "data/models/1/")]
-    (setv root (first rs))
-    (setv files (last rs))
-    (for [file files]
-      (with [f (open (os.path.join root file) "rb")]
-        (while True
-          (setv data (.read f *buf-size*))
-          (if (not data)
-              (break))
-          (.update sha1 data)))))
-  (.upper (.hexdigest sha1)))
 
 (import zipfile)
 
@@ -101,3 +81,21 @@
       (setv files (last rs))
       (for [file files]
         (.write ziph (os.path.join root file))))))
+
+(import hashlib)
+
+(defn hash-dir [dir-path]
+  "Returns a hex string of the sha1 digest of the contents of the directory"
+  (setv *buf-size* 65536)
+  (setv sha1 (hashlib.sha1))
+  (for [rs (os.walk dir-path)]
+    (setv root (first rs))
+    (setv files (last rs))
+    (for [file files]
+      (with [f (open (os.path.join root file) "rb")]
+        (while True
+          (setv data (.read f *buf-size*))
+          (if (not data)
+              (break))
+          (.update sha1 data)))))
+  (.upper (.hexdigest sha1)))
