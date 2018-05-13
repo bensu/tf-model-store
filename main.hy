@@ -80,10 +80,10 @@
   Returned as [{'in' {'x' list} 'out' {'y' list}}]"
   (list (map (fn [example]
                (setv data-in (get example "in"))
-               (setv feed (dict (map (fn [k] [(.get_tensor_by_name session.graph (+ k "_4:0")) (get data-in k)]) data-in)))
+               (setv feed (dict (map (fn [k] [(.get_tensor_by_name session.graph (+ k ":0")) (get data-in k)]) data-in)))
                (setv example-cases (dict (map (fn [k] [k (.tolist (get data-in k))]) data-in)))
                (setv out (get example "out"))
-               (setv node (.get_tensor_by_name session.graph (+ out "_5:0")))
+               (setv node (.get_tensor_by_name session.graph (+ out ":0")))
                (setv results (.run session node :feed_dict feed))
                {"in"  example-cases
                 "out" {out (.tolist results)}})
@@ -95,8 +95,6 @@
 (import tempfile)
 
 (import tensorflow.python.util.compat)
-
-(setv builder (tensorflow.saved_model.builder.SavedModelBuilder target-dir))
 
 (setv model (tf.saved_model.signature_def_utils.predict_signature_def :inputs {"x" x} :outputs {"y" y}))
 
@@ -166,6 +164,8 @@
 ;; ======================================================================
 ;; Publish
 
+(setv *models-bucket* "the-bucket-you-are-using")
+
 (defn publish! [session model model-name examples owner]
   "Saves the model to disk, hashes, zips it, and uploads it to S3. Returns the sha"
   (setv saved-model-dir (save-model! :target-dir *default-target-dir* :session session :model model
@@ -176,6 +176,9 @@
   (setv bucket (.get_bucket s3 *models-bucket*))
   (upload-file! bucket (+ saved-model-dir ".zip") sha)
   sha)
+
+(publish! :session session :model model :model-name "simple-linear"
+          :examples [{"in" {"x" features} "out" "y"}] :owner "sebastian")
 
 (comment
   ;; setup bucket
