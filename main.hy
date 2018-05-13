@@ -167,14 +167,15 @@
 ;; Publish
 
 (defn publish! [session model model-name examples owner]
-  "Saves the model to disk, hashes, zips it, and uploads it to S3"
+  "Saves the model to disk, hashes, zips it, and uploads it to S3. Returns the sha"
   (setv saved-model-dir (save-model! :target-dir *default-target-dir* :session session :model model
                                      :model-name model-name :examples examples :owner owner))
   (setv sha (hash-dir saved-model-dir))
   (zipdir! saved-model-dir saved-model-dir)
   (setv s3 (.connect_s3 boto))
   (setv bucket (.get_bucket s3 *models-bucket*))
-  (upload-file! bucket (+ saved-model-dir ".zip") sha))
+  (upload-file! bucket (+ saved-model-dir ".zip") sha)
+  sha)
 
 (comment
   ;; setup bucket
