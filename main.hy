@@ -71,18 +71,25 @@
 
 (import tensorflow.python.util.compat)
 
-(setv target-dir "data/models/1")
-
 (setv builder (tensorflow.saved_model.builder.SavedModelBuilder target-dir))
 
 (setv model (tf.saved_model.signature_def_utils.predict_signature_def :inputs {"x" x} :outputs {"y" y}))
 
-(.add_meta_graph_and_variables builder
-                               session
-                               [tf.saved_model.tag_constants.SERVING]
-                               :signature_def_map {"magic_model" model})
+(setv *default-target-dir* "data/models/")
 
-(.save builder)
+(import json)
+
+(defn save-model! [session model model-name examples owner target-dir]
+  "Saves the model, returns the directory where it was saved"
+  (setv builder (tensorflow.saved_model.builder.SavedModelBuilder (os.path.join target-dir model-name)))
+  (.add_meta_graph_and_variables builder
+                                 session
+                                 [tf.saved_model.tag_constants.SERVING]
+                                 :signature_def_map {model-name model})
+  (.save builder model-name)
+  (with [json-file (open (os.path.join target-dir model-name "custom-meta.json") "w")]
+    (json.dump {"examples" examples "owner" owner "name" model-name} json-file))
+  (os.path.join target-dir model-name))
 
 ;; ======================================================================
 ;; Upload the model to S3
