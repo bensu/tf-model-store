@@ -81,9 +81,7 @@
   (setv sha1 (hashlib.sha1))
   (for [rs (os.walk "data/models/1/")]
     (setv root (first rs))
-    (setv dirs (second rs))
     (setv files (last rs))
-    (setv path (.split root os.sep))
     (for [file files]
       (with [f (open (os.path.join root file) "rb")]
         (while True
@@ -92,3 +90,14 @@
               (break))
           (.update sha1 data)))))
   (.upper (.hexdigest sha1)))
+
+(import zipfile)
+
+(defn zipdir! [source target]
+  "Adds all files in the `source` directory into the `target` zip file"
+  (with [ziph (zipfile.ZipFile target "w" zipfile.ZIP_DEFLATED)]
+    (for [rs (os.walk source)]
+      (setv root (first rs))
+      (setv files (last rs))
+      (for [file files]
+        (.write ziph (os.path.join root file))))))
