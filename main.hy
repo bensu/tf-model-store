@@ -6,6 +6,16 @@
      (import ~module)
      (setv ~alias ~module)))
 
+(defn get-in [m ks]
+  (setv k (first ks))
+  (if (none? m)
+      None
+      (if (none? k)
+          None
+          (if (empty? (list (rest ks)))
+              (get m k)
+              (get-in (get m k) (list (rest ks)))))))
+
 (import-as tensorflow tf)
 
 (import-as numpy np)
@@ -64,6 +74,21 @@
 
 (.run session y :feed_dict {x features})
 
+(defn run-examples [session examples]
+  "examples [{'in' {'x' numpy} 'out' 'y'}]
+
+  Returned as [{'in' {'x' list} 'out' {'y' list}}]"
+  (list (map (fn [example]
+               (setv data-in (get example "in"))
+               (setv feed (dict (map (fn [k] [(.get_tensor_by_name session.graph (+ k "_4:0")) (get data-in k)]) data-in)))
+               (setv example-cases (dict (map (fn [k] [k (.tolist (get data-in k))]) data-in)))
+               (setv out (get example "out"))
+               (setv node (.get_tensor_by_name session.graph (+ out "_5:0")))
+               (setv results (.run session node :feed_dict feed))
+               {"in"  example-cases
+                "out" {out (.tolist results)}})
+             examples)))
+
 ;; ======================================================================
 ;; Serialize the model
 
@@ -88,7 +113,11 @@
                                  :signature_def_map {model-name model})
   (.save builder model-name)
   (with [json-file (open (os.path.join target-dir model-name "custom-meta.json") "w")]
-    (json.dump {"examples" examples "owner" owner "name" model-name} json-file))
+    (json.dump {"examples" (run-examples session examples)
+                "owner" owner
+                "name" model-name
+                "model-type" "tensorflow"}
+               json-file))
   (os.path.join target-dir model-name))
 
 ;; ======================================================================
@@ -108,7 +137,6 @@
 
 (defn hash-dir [dir-path]
   "Returns a hex string of the sha1 digest of the contents of the directory"
-  ;; XXX: always returns the same value
   (setv *buf-size* 65536)
   (setv sha1 (hashlib.sha1))
   (for [rs (os.walk dir-path)]
