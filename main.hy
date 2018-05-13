@@ -92,7 +92,10 @@
   (os.path.join target-dir model-name))
 
 ;; ======================================================================
-;; Upload the model to S3
+;; Package the file
+
+;; In this case, hashing guarantees uniqueness but not idempotency. tf.SaveModel will add the saved_count/# in the output files.
+;; So, if you save the same model twice, it will work the same way but with different hashes. Oh well.
 
 (import os)
 
@@ -105,6 +108,7 @@
 
 (defn hash-dir [dir-path]
   "Returns a hex string of the sha1 digest of the contents of the directory"
+  ;; XXX: always returns the same value
   (setv *buf-size* 65536)
   (setv sha1 (hashlib.sha1))
   (for [rs (os.walk dir-path)]
@@ -124,20 +128,40 @@
 
 (import boto)
 
-(import math)
-
-(setv s3 (.connect_s3 boto))
-
-(comment
-  (.create_bucket s3 *models-bucket*))
-
-(comment
-  (setv bucket (.get_bucket s3 *models-bucket*)))
-
-(setv file-path "data/models/1.zip")
-
-(defn upload-file! [bucket file-path]
-  (setv file-hash (hash-dir file-path))
+(defn upload-file! [bucket file-path file-hash]
   (setv k (boto.s3.key.Key bucket))
+
   (setv k.key file-hash)
+
   (.set_contents_from_filename k file-path))
+
+;; ======================================================================
+;; Publish
+
+(defn publish! [session model model-name examples owner]
+  "Saves the model to disk, hashes, zips it, and uploads it to S3"
+  (setv saved-model-dir (save-model! :target-dir *default-target-dir* :session session :model model
+                                     :model-name model-name :examples examples :owner owner))
+  (setv sha (hash-dir saved-model-dir))
+  (zipdir! saved-model-dir saved-model-dir)
+  (setv s3 (.connect_s3 boto))
+  (setv bucket (.get_bucket s3 *models-bucket*))
+  (upload-file! bucket (+ saved-model-dir ".zip") sha))
+
+(comment
+  ;; setup bucket
+
+  (setv s3 (.connect_s3 boto))
+
+  (.create_bucket s3 *models-bucket*)
+
+  (setv bucket (.get_bucket s3 *models-bucket*))
+
+  (zipdir! "data/models/2" "data/models/2.zip")
+
+  (upload-file! bucket "data/models/2.zip")
+
+  ;; example API call
+
+  (publish! :session session :model model :model-name "simple-linear"
+            :examples {"cases" [{"in" 1 "out" 0} {"in" 2 "out" 1}]} :owner "sebastian"))
