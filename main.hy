@@ -65,3 +65,30 @@
                                :signature_def_map {"magic_model" model})
 
 (.save builder)
+
+;; ======================================================================
+;; Upload the model to S3
+
+(import sys)
+
+(import hashlib)
+
+(import os)
+
+(defn hash-dir [dir-path]
+  "Returns a hex string of the sha1 digest of the contents of the directory"
+  (setv *buf-size* 65536)
+  (setv sha1 (hashlib.sha1))
+  (for [rs (os.walk "data/models/1/")]
+    (setv root (first rs))
+    (setv dirs (second rs))
+    (setv files (last rs))
+    (setv path (.split root os.sep))
+    (for [file files]
+      (with [f (open (os.path.join root file) "rb")]
+        (while True
+          (setv data (.read f *buf-size*))
+          (if (not data)
+              (break))
+          (.update sha1 data)))))
+  (.upper (.hexdigest sha1)))
