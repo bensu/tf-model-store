@@ -51,6 +51,7 @@
 ;; Serialize the model
 
 (import tempfile)
+
 (import tensorflow.python.util.compat)
 
 (setv target-dir "data/models/1")
@@ -77,6 +78,7 @@
   "Adds all files in the `source` directory into the `target` zip file"
   (with [ziph (zipfile.ZipFile target "w" zipfile.ZIP_DEFLATED)]
     (for [rs (os.walk source)]
+      ;; XXX: fix to use relative paths to the root of the passed source and not the call directory
       (setv root (first rs))
       (setv files (last rs))
       (for [file files]
@@ -99,3 +101,26 @@
               (break))
           (.update sha1 data)))))
   (.upper (.hexdigest sha1)))
+
+;; ======================================================================
+;; Upload S3
+
+(import boto)
+
+(import math)
+
+(setv s3 (.connect_s3 boto))
+
+(comment
+  (.create_bucket s3 *models-bucket*))
+
+(comment
+  (setv bucket (.get_bucket s3 *models-bucket*)))
+
+(setv file-path "data/models/1.zip")
+
+(defn upload-file! [bucket file-path]
+  (setv file-hash (hash-dir file-path))
+  (setv k (boto.s3.key.Key bucket))
+  (setv k.key file-hash)
+  (.set_contents_from_filename k file-path))
