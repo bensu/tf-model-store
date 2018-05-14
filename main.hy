@@ -128,6 +128,7 @@
 (import boto3)
 
 (import namesgenerator)
+(import datetime)
 
 (defn zipdir! [source target]
   (shutil.make_archive target "zip" source))
@@ -139,30 +140,46 @@
 
 (setv *models-bucket* "the-bucket-you-are-using")
 
+(defn update-registry! [s3-client model-description]
+  "registry.json contains a list with all the models ever uploaded"
+  (setv registry-object (s3-client.get_object :Bucket *models-bucket* :Key "registry.json"))
+  (setv registry (json.loads (.decode (.read (get registry-object "Body")) "utf-8")))
+  (assoc registry "updated-ts" (.isoformat (datetime.datetime.now)))
+  (setv registered-models (get registry "models"))
+  (.append registered-models model-description)
+  (s3-client.put_object :Bucket *models-bucket* :Key "registry.json" :Body (.encode (json.dumps registry))))
+
 (defn publish! [session model model-name examples owner]
   "Saves the model to disk, names it, zips it, and uploads it to S3. Returns the generated name for the model"
   ;; save
   (setv saved-model-dir (save-model! :target-dir *default-target-dir* :session session :model model
                                      :model-name model-name :examples examples :owner owner))
   ;; name
+  (setv now-str (.isoformat (datetime.datetime.now)))
   (setv model-key (quasi-unique-name))
   ;; zip
   (zipdir! saved-model-dir saved-model-dir)
   ;; upload
   (setv s3 (boto3.resource "s3"))
   (setv bucket (s3.Bucket *models-bucket*))
-  (bucket.upload_file (+ saved-model-dir ".zip") model-key :ExtraArgs {"Metadata" {"owner" owner
-                                                                                   "model-key" model-key
-                                                                                   "model-name" model-name
-                                                                                   "model-type" "tensorflow"}})
-  ;; tag s3 bucket
+  (setv model-description {"owner" owner
+                           "model-key" model-key
+                           "model-name" model-name
+                           "model-type" "tensorflow"
+                           "created-ts" now-str})
+  (bucket.upload_file (+ saved-model-dir ".zip") model-key :ExtraArgs {"Metadata" model-description})
+  (setv s3-client (boto3.client "s3"))
+  (s3-client.get_object :Bucket *models-bucket* :Key "registry.json")
+  ;; update registry
+  (update-registry! s3-client model-description)
   (comment
-    #_(setv s3-client (boto3.client "s3"))
-    #_(s3-client.put_object_tagging :Bucket *models-bucket* :Key model-key
-                                    :Tagging {"TagSet" [{"Key" "owner" "Value" owner}
-                                                        {"Key" "model-key" "Value" model-key}
-                                                        {"Key" "model-name" "Value" model-name}
-                                                        {"Key" "model-type" "Value" "tensorflow"}]}))
+    ;; tag s3 bucket
+    (s3-client.put_object_tagging :Bucket *models-bucket* :Key model-key
+                                  :Tagging {"TagSet" [{"Key" "owner" "Value" owner}
+                                                      {"Key" "created-ts" "Value" now-str}
+                                                      {"Key" "model-key" "Value" model-key}
+                                                      {"Key" "model-name" "Value" model-name}
+                                                      {"Key" "model-type" "Value" "tensorflow"}]}))
   model-key)
 
 (print "You are publishing:")
