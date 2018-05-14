@@ -158,19 +158,23 @@
 
 (defn publish! [session model model-name examples owner]
   "Saves the model to disk, hashes, zips it, and uploads it to S3. Returns the sha"
+  ;; save
   (setv saved-model-dir (save-model! :target-dir *default-target-dir* :session session :model model
                                      :model-name model-name :examples examples :owner owner))
+  ;; hash
   (setv sha (hash-dir saved-model-dir))
+  ;; zip
   (zipdir! saved-model-dir saved-model-dir)
-
+  ;; upload
   (setv s3 (boto3.resource "s3"))
   (setv bucket (s3.Bucket *models-bucket*))
   (bucket.upload_file (+ saved-model-dir ".zip") sha)
-
-  (comment
-    (setv s3 (.connect_s3 boto))
-    (setv bucket (.get_bucket s3 *models-bucket*)))
-
+  ;; tag s3 bucket
+  (setv s3-client (boto3.client "s3"))
+  (s3-client.put_object_tagging :Bucket *models-bucket* :Key sha
+                                :Tagging {"TagSet" [{"Key" "owner" "Value" owner}
+                                                    {"Key" "model-name" "Value" model-name}
+                                                    {"Key" "model-type" "Value" "tensorflow"}]})
   sha)
 
 (publish! :session session :model model :model-name "simple-linear"
