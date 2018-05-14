@@ -119,66 +119,58 @@
   (os.path.join target-dir model-name))
 
 ;; ======================================================================
-;; Package the file
-
-;; In this case, hashing guarantees uniqueness but not idempotency. tf.SaveModel will add the saved_count/# in the output files.
-;; So, if you save the same model twice, it will work the same way but with different hashes. Oh well.
+;; Package and Publish
 
 (import os)
 
 (import shutil)
 
+(import boto3)
+
+(import namesgenerator)
+
 (defn zipdir! [source target]
   (shutil.make_archive target "zip" source))
 
-(import hashlib)
-
-(defn hash-dir [dir-path]
-  "Returns a hex string of the sha1 digest of the contents of the directory"
-  (setv *buf-size* 65536)
-  (setv sha1 (hashlib.sha1))
-  (for [rs (os.walk dir-path)]
-    (setv root (first rs))
-    (setv files (last rs))
-    (for [file files]
-      (with [f (open (os.path.join root file) "rb")]
-        (while True
-          (setv data (.read f *buf-size*))
-          (if (not data)
-              (break))
-          (.update sha1 data)))))
-  (.upper (.hexdigest sha1)))
-
-;; ======================================================================
-;; Package and Publish
-
-(import boto3)
+(defn quasi-unique-name []
+  "The namesgenerator has 15k which is not unique enough for my taste. Increasing to 1M by prepending a second adjective"
+  (setv unique-name (namesgenerator.get_random_name "-"))
+  (+ (first (.split(namesgenerator.get_random_name "-") "-")) "-" unique-name))
 
 (setv *models-bucket* "the-bucket-you-are-using")
 
 (defn publish! [session model model-name examples owner]
-  "Saves the model to disk, hashes, zips it, and uploads it to S3. Returns the sha"
+  "Saves the model to disk, names it, zips it, and uploads it to S3. Returns the generated name for the model"
   ;; save
   (setv saved-model-dir (save-model! :target-dir *default-target-dir* :session session :model model
                                      :model-name model-name :examples examples :owner owner))
-  ;; hash
-  (setv sha (hash-dir saved-model-dir))
+  ;; name
+  (setv model-key (quasi-unique-name))
   ;; zip
   (zipdir! saved-model-dir saved-model-dir)
   ;; upload
   (setv s3 (boto3.resource "s3"))
   (setv bucket (s3.Bucket *models-bucket*))
-  (bucket.upload_file (+ saved-model-dir ".zip") sha)
+  (bucket.upload_file (+ saved-model-dir ".zip") model-key :ExtraArgs {"Metadata" {"owner" owner
+                                                                                   "model-key" model-key
+                                                                                   "model-name" model-name
+                                                                                   "model-type" "tensorflow"}})
   ;; tag s3 bucket
-  (setv s3-client (boto3.client "s3"))
-  (s3-client.put_object_tagging :Bucket *models-bucket* :Key sha
-                                :Tagging {"TagSet" [{"Key" "owner" "Value" owner}
-                                                    {"Key" "model-name" "Value" model-name}
-                                                    {"Key" "model-type" "Value" "tensorflow"}]})
-  sha)
+  (comment
+    #_(setv s3-client (boto3.client "s3"))
+    #_(s3-client.put_object_tagging :Bucket *models-bucket* :Key model-key
+                                    :Tagging {"TagSet" [{"Key" "owner" "Value" owner}
+                                                        {"Key" "model-key" "Value" model-key}
+                                                        {"Key" "model-name" "Value" model-name}
+                                                        {"Key" "model-type" "Value" "tensorflow"}]}))
+  model-key)
 
-(publish! :session session :model model :model-name "simple-linear"
-          :examples [{"in" {"x" features} "out" "y"}] :owner "sebastian")
+(print "You are publishing:")
+
+(print
+  (publish! :session session :model model :model-name "simple-linear"
+            :examples [{"in" {"x" features} "out" "y"}] :owner "sebastian"))
+
 
 (comment
   ;; setup bucket
